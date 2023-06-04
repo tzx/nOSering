@@ -29,6 +29,7 @@ SECTIONS
   } >ram :ram_fakerom
 
   .rodata : ALIGN(4K) {
+    PROVIDE( _global_pointer = . );
     *(.rodata);
   } >ram :ram_fakerom
 
@@ -40,11 +41,12 @@ SECTIONS
     *(.bss);
   } >ram :ram
 
-  /*
-  PROVIDE( bss_start = ADDR(.bss) );
-  PROVIDE( bss_end = ADDR(.bss) + SIZEOF(.bss) );
-  PROVIDE( data_rom = ADDR(.rodata) );
-  PROVIDE( data_start = ADDR(.data) );
-  PROVIDE( data_end = ADDR(.data) + SIZEOF(.data) );
-  */
+  PROVIDE( _bss_start = ADDR(.bss) );
+  PROVIDE( _bss_end = ADDR(.bss) + SIZEOF(.bss) );
+
+  PROVIDE( _stack_start = _bss_end );
+  /* Stack size of 4kB */
+  PROVIDE( _stack_end = _stack_start + 0x4000 );
+  PROVIDE( _heap_start = _stack_end );
+  PROVIDE( _PHYSTOP = ORIGIN(ram) + LENGTH(ram) );
 }
