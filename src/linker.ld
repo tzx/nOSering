@@ -24,7 +24,7 @@ PHDRS
 SECTIONS
 {
   .text : ALIGN(4K) {
-    *(.init);
+    *(.text.init);
     *(.text);
   } >ram :ram_fakerom
 
