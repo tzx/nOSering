@@ -12,11 +12,13 @@
         pkgs = import nixpkgs { inherit system; };
       in
       {
-        devShells.default = pkgs.mkShell {
+        devShells.default = pkgs.pkgsCross.riscv64-embedded.mkShell {
           nativeBuildInputs = with pkgs; [
             zig
             zls
             qemu
+            gdb
+            gcc
           ];
         };
       }
