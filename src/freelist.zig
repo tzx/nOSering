@@ -57,6 +57,7 @@ pub fn kfree(addr: u64) void {
 
     const block = .{ .addr = addr };
     var node = LL.Node{ .data = block };
+    // lol is a reference even safe?
     free_list.prepend(&node);
 }
 

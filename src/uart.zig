@@ -1,3 +1,6 @@
+const fmt = @import("std").fmt;
+const Writer = @import("std").io.Writer;
+
 // Resource: https://www.lammertbies.nl/comm/info/serial-uart#LCR
 
 const UART_BASE_ADDRESS = 0x1000_0000;
@@ -27,8 +30,19 @@ fn uartPutc(base_addr: usize, c: u8) void {
     uart[0] = c;
 }
 
-pub fn print(str: []const u8) void {
+fn print(str: []const u8) void {
     for (str) |c| {
         uartPutc(UART_BASE_ADDRESS, c);
     }
+}
+
+pub const writer = Writer(void, error{}, callback){ .context = {} };
+
+fn callback(_: void, string: []const u8) error{}!usize {
+    print(string);
+    return string.len;
+}
+
+pub fn printf(comptime format: []const u8, args: anytype) void {
+    fmt.format(writer, format, args) catch unreachable;
 }
