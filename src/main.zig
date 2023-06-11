@@ -13,7 +13,6 @@ pub fn panic(message: []const u8, _: ?*builtin.StackTrace, _: ?usize) noreturn {
 export fn kmain() noreturn {
     uart.uartInit();
     freelist.initFreeList();
-    const number = 1;
-    uart.printf("This is a number: {d}", .{number});
+    freelist.printFreePages();
     @panic("You reached kmain!");
 }

@@ -1,4 +1,5 @@
 const LinkedList = @import("std").SinglyLinkedList;
+const printf = @import("uart.zig").printf;
 
 extern const _heap_start: u8;
 extern const _PHYSTOP: u8;
@@ -34,7 +35,7 @@ pub fn pageDown(addr: u64) u64 {
 pub fn initFreeList() void {
     const heap = heapInfo();
     var p = pageUp(heap.start);
-    while (p + PAGE_SIZE <= pageDown(heap.end)) {
+    while (p + PAGE_SIZE < pageDown(heap.end)) {
         kfree(p);
         p += PAGE_SIZE;
     }
@@ -66,4 +67,28 @@ pub fn kalloc() []u8 {
     const addr = block.addr;
     const ptr = @intToPtr([PAGE_SIZE]u8, addr);
     return ptr;
+}
+
+pub fn printFreePages() void {
+    // const heap = heapInfo();
+    // var p = pageUp(heap.start);
+    // while (p < pageDown(heap.end)): (p += PAGE_SIZE) {
+
+    {
+        var n = free_list.first;
+        const len = free_list.len();
+        printf("Length: {d}\n", .{len});
+        var cnt: usize = 0;
+        while (n) |node| : (n = node.next) {
+            const block = node.data;
+            printf("Addr: {x}\n", .{block.addr});
+            cnt += 1;
+        }
+    }
+    // while (node) |n| {
+    //     const block = n.data;
+    //     printf("Addr: {x}\n", .{block.addr});
+    //     // colon doesn't with |n| ?
+    //     node = n.next;
+    // }
 }
