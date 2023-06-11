@@ -18,11 +18,16 @@ fn heapInfo() HeapInfo {
 }
 
 const Block = struct {
-    addr: u64,
+    next: ?*Block,
 };
 
-const LL = LinkedList(Block);
-var free_list = LL{};
+const FreeList = struct {
+    head: ?*Block,
+};
+
+var free_list = FreeList{
+    .head = null,
+};
 
 pub fn pageUp(addr: u64) u64 {
     return (addr + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
@@ -35,7 +40,7 @@ pub fn pageDown(addr: u64) u64 {
 pub fn initFreeList() void {
     const heap = heapInfo();
     var p = pageUp(heap.start);
-    while (p + PAGE_SIZE < pageDown(heap.end)) {
+    while (p + PAGE_SIZE <= pageDown(heap.end)) {
         kfree(p);
         p += PAGE_SIZE;
     }
@@ -52,43 +57,30 @@ pub fn kfree(addr: u64) void {
         @panic("freeBlock: Address is not in range of heap");
     }
 
-    const ptr = @intToPtr([*]u8, addr);
     // Fill with junk
+    const ptr = @intToPtr([*]u8, addr);
     for (ptr[0..PAGE_SIZE]) |*p| p.* = 1;
 
-    const block = .{ .addr = addr };
-    var node = LL.Node{ .data = block };
-    // lol is a reference even safe?
-    free_list.prepend(&node);
+    var bptr = @ptrCast(*Block, @alignCast(@alignOf(*Block), ptr));
+    // TODO: function for free_list
+    bptr.next = free_list.head;
+    free_list.head = bptr;
 }
 
-pub fn kalloc() []u8 {
-    const block = free_list.popFirst();
-    const addr = block.addr;
-    const ptr = @intToPtr([PAGE_SIZE]u8, addr);
+pub fn kalloc() ![]u8 {
+    const bptr = free_list.head orelse return error.OutOfMemory;
+    free_list.head = bptr.next;
+    const ptr = @ptrCast([PAGE_SIZE]u8, bptr);
     return ptr;
 }
 
 pub fn printFreePages() void {
-    // const heap = heapInfo();
-    // var p = pageUp(heap.start);
-    // while (p < pageDown(heap.end)): (p += PAGE_SIZE) {
-
-    {
-        var n = free_list.first;
-        const len = free_list.len();
-        printf("Length: {d}\n", .{len});
-        var cnt: usize = 0;
-        while (n) |node| : (n = node.next) {
-            const block = node.data;
-            printf("Addr: {x}\n", .{block.addr});
-            cnt += 1;
-        }
+    var len: usize = 0;
+    var head = free_list.head;
+    while (head) |block| : (head = block.next) {
+        len += 1;
+        const addr = @ptrToInt(block);
+        printf("Addr: {x}\n", .{addr});
     }
-    // while (node) |n| {
-    //     const block = n.data;
-    //     printf("Addr: {x}\n", .{block.addr});
-    //     // colon doesn't with |n| ?
-    //     node = n.next;
-    // }
+    printf("Number of free pages: {d}\n", .{len});
 }
