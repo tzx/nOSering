@@ -10,7 +10,7 @@ const PAGE_SIZE = memlist.PAGE_SIZE;
 const MAX_VA = (1 << 39) - 1;
 
 const NUM_ENTRIES = 512;
-const pagetable_t = *[NUM_ENTRIES]u64;
+const pagetable_t = *[NUM_ENTRIES]pagetable_entry_t;
 const pagetable_entry_t = u64;
 
 pub fn kvmInit() pagetable_t {
@@ -95,7 +95,7 @@ fn map(pagetable: pagetable_t, v_addr: u64, p_addr: u64, pte_bits: u8, size: u64
     var addr = memlist.pageDown(v_addr);
     var mapped_addr = p_addr;
     const last_pg_aligned_addr = memlist.pageDown(v_addr + size - 1);
-    while (addr != last_pg_aligned_addr) : ({
+    while (addr <= last_pg_aligned_addr) : ({
         addr += PAGE_SIZE;
         mapped_addr += PAGE_SIZE;
     }) {
