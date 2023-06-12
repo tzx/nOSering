@@ -59,7 +59,9 @@ fn paToPte(pa: u64) pagetable_entry_t {
     return ppn << 10;
 }
 
-fn walk(pagetable_: pagetable_t, v_addr: u64, alloc: bool) pagetable_entry_t {
+// Returns pointer to final page table entry corresponding to v_addr, if alloc
+// is true then allocate pages if they are missing along the walk
+fn walk(pagetable_: pagetable_t, v_addr: u64, alloc: bool) *pagetable_entry_t {
     if (v_addr > MAX_VA) {
         @panic("walk: v_addr > MAX_VA");
     }
@@ -68,7 +70,8 @@ fn walk(pagetable_: pagetable_t, v_addr: u64, alloc: bool) pagetable_entry_t {
     var level: usize = 2;
     while (level > 0) : (level -= 1) {
         const pte_idx = getVPNEntryIdx(v_addr, level);
-        var pte = pagetable[pte_idx];
+        const pte_p = &pagetable[pte_idx];
+        const pte = pte_p.*;
         if (pte & PTE_V != 0) {
             pagetable = pteToPagetable(pte);
         } else {
@@ -80,11 +83,11 @@ fn walk(pagetable_: pagetable_t, v_addr: u64, alloc: bool) pagetable_entry_t {
             const lloced = memlist.kalloc() catch unreachable;
             pagetable = @ptrCast(pagetable_t, @alignCast(@alignOf(pagetable_t), lloced));
             mem.set(pagetable_entry_t, pagetable, 0);
-            (&pte).* = pagetableToPte(pagetable) | PTE_V;
+            pte_p.* = pagetableToPte(pagetable) | PTE_V;
         }
     }
     const pte_idx = getVPNEntryIdx(v_addr, 0);
-    return pagetable[pte_idx];
+    return &pagetable[pte_idx];
 }
 
 fn map(pagetable: pagetable_t, v_addr: u64, p_addr: u64, pte_bits: u8, size: u64) void {
