@@ -42,9 +42,13 @@ fn getVPNEntryIdx(v_addr: u64, level: usize) u64 {
     return index;
 }
 
-fn pteToPagetable(pte: pagetable_entry_t) pagetable_t {
+fn pteToAddr(pte: pagetable_entry_t) u64 {
     const ppn = pte >> 10;
-    const address = ppn * PAGE_SIZE;
+    return ppn * PAGE_SIZE;
+}
+
+fn pteToPagetable(pte: pagetable_entry_t) pagetable_t {
+    const address = pteToAddr(pte);
     return @intToPtr(pagetable_t, address);
 }
 
@@ -142,7 +146,10 @@ pub fn printPgEntries(root_pg: pagetable_t) void {
                 if (pte_k & PTE_V == 0) {
                     continue;
                 }
-                printf(".. .. ..{d}: pte {x}\n", .{ k, pte_k });
+
+                const pa = pteToAddr(pte_k);
+                const va = i << 12 + 18 | j << 12 + 9 | k << 12; //  || j << 12 + 9 || k << 12);
+                printf(".. .. ..{d}: pte {x} pa: {x} <- va: {x}\n", .{ k, pte_k, pa, va });
             }
         }
     }
