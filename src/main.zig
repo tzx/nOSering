@@ -16,8 +16,8 @@ export fn kmain() noreturn {
     freelist.initFreeList();
     // TODO: set the kernel's satp to this. right?
     const kpgt = pagetable.kvmInit();
-    uart.printf("Kernel page table: {any}", .{kpgt});
+    pagetable.printPgEntries(kpgt);
 
-    freelist.printFreePages();
+    // freelist.printFreePages();
     @panic("You reached kmain!");
 }

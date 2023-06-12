@@ -105,10 +105,45 @@ fn map(pagetable: pagetable_t, v_addr: u64, p_addr: u64, pte_bits: u8, size: u64
         if (addr > last_pg_aligned_addr) {
             @panic("map: address is out of bounds");
         }
-        var pte = walk(pagetable, v_addr, true);
-        if (pte & PTE_V != 0) {
+        const pte_p = walk(pagetable, v_addr, true);
+        if (pte_p.* & PTE_V != 0) {
             @panic("map: mapping already mapped address for specific pagetable");
         }
-        (&pte).* = paToPte(mapped_addr) | pte_bits | PTE_V;
+        pte_p.* = paToPte(mapped_addr) | pte_bits | PTE_V;
+    }
+}
+
+// TODO: Refactor ugly ass code to something recursive? O(512 ** num_levels)
+pub fn printPgEntries(root_pg: pagetable_t) void {
+    printf("root page table: {*}\n", .{root_pg});
+
+    // XXX: Zig 0.11 can do enumerate
+    var i: usize = 0;
+    while (i < NUM_ENTRIES) : (i += 1) {
+        const pte_i = root_pg[i];
+        if (pte_i & PTE_V == 0) {
+            continue;
+        }
+        printf("..{d}: pte {x}\n", .{ i, pte_i });
+        const pg_j = pteToPagetable(pte_i);
+
+        var j: usize = 0;
+        while (j < NUM_ENTRIES) : (j += 1) {
+            const pte_j = pg_j[j];
+            if (pte_j & PTE_V == 0) {
+                continue;
+            }
+            printf(".. ..{d}: pte {x}\n", .{ j, pte_j });
+            const pg_k = pteToPagetable(pte_j);
+
+            var k: usize = 0;
+            while (k < NUM_ENTRIES) : (k += 1) {
+                const pte_k = pg_k[k];
+                if (pte_k & PTE_V == 0) {
+                    continue;
+                }
+                printf(".. .. ..{d}: pte {x}\n", .{ k, pte_k });
+            }
+        }
     }
 }
