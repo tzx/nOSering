@@ -70,7 +70,7 @@ pub fn kfree(addr: u64) void {
 pub fn kalloc() ![]u8 {
     const bptr = free_list.head orelse return error.OutOfMemory;
     free_list.head = bptr.next;
-    const ptr = @ptrCast([PAGE_SIZE]u8, bptr);
+    const ptr = @ptrCast([*]u8, bptr)[0..PAGE_SIZE];
     return ptr;
 }
 
