@@ -23,6 +23,9 @@ PHDRS
 /* We are putting everything into RAM */
 SECTIONS
 {
+  /* We align each section by 4K, so mappings for sections are page aligned. We
+   * only use it for |text|everything else| though */
+
   .text : ALIGN(4K) {
     *(.text.init);
     *(.text);
@@ -41,12 +44,17 @@ SECTIONS
     *(.bss);
   } >ram :ram
 
+  PROVIDE( _text_start = ADDR(.text) );
+  PROVIDE( _text_end = ADDR(.rodata) );
   PROVIDE( _bss_start = ADDR(.bss) );
   PROVIDE( _bss_end = ADDR(.bss) + SIZEOF(.bss) );
 
   PROVIDE( _stack_start = _bss_end );
   /* Stack size of 4kB */
   PROVIDE( _stack_end = _stack_start + 0x4000 );
+
+  PROVIDE( _kernel_end = _stack_end);
+
   PROVIDE( _heap_start = _stack_end );
   PROVIDE( _PHYSTOP = ORIGIN(ram) + LENGTH(ram) );
 }

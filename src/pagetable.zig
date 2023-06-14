@@ -13,11 +13,24 @@ const NUM_ENTRIES = 512;
 const pagetable_t = *[NUM_ENTRIES]pagetable_entry_t;
 const pagetable_entry_t = u64;
 
+extern const _text_start: u8;
+extern const _text_end: u8;
+extern const _kernel_end: u8;
+
 pub fn kvmInit() pagetable_t {
     const loced = memlist.kalloc() catch unreachable;
     const kpgt = @ptrCast(pagetable_t, @alignCast(@alignOf(pagetable_t), loced));
     mem.set(pagetable_entry_t, kpgt, 0);
     map(kpgt, memlayout.UART0, memlayout.UART0, PTE_R | PTE_W, PAGE_SIZE);
+    map(kpgt, memlayout.VIRTIO0, memlayout.VIRTIO0, PTE_R | PTE_W, PAGE_SIZE);
+    map(kpgt, memlayout.PLIC, memlayout.PLIC, PTE_R | PTE_W, memlayout.PLIC_SIZE);
+
+    const text_start = @ptrToInt(&_text_start);
+    const text_end = @ptrToInt(&_text_end);
+    map(kpgt, text_start, text_start, PTE_R | PTE_X, text_end - text_start);
+
+    const kernel_end = @ptrToInt(&_kernel_end);
+    map(kpgt, text_end, text_end, PTE_R | PTE_W, kernel_end - text_end);
 
     return kpgt;
 }
@@ -109,8 +122,9 @@ fn map(pagetable: pagetable_t, v_addr: u64, p_addr: u64, pte_bits: u8, size: u64
         if (addr > last_pg_aligned_addr) {
             @panic("map: address is out of bounds");
         }
-        const pte_p = walk(pagetable, v_addr, true);
+        const pte_p = walk(pagetable, addr, true);
         if (pte_p.* & PTE_V != 0) {
+            printf("failed: pte_p: {x}\n", .{pte_p.*});
             @panic("map: mapping already mapped address for specific pagetable");
         }
         pte_p.* = paToPte(mapped_addr) | pte_bits | PTE_V;
