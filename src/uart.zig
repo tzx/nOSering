@@ -22,7 +22,8 @@ pub fn uartInit() void {
     uart[1] = 0b0000_0011;
 }
 
-fn uartPutc(base_addr: usize, c: u8) void {
+// TODO: remove pub
+pub fn uartPutc(base_addr: usize, c: u8) void {
     var uart = @intToPtr([*]volatile u8, base_addr)[0..8];
 
     // Wait for LSR Bit 5 to say that the THR is empty

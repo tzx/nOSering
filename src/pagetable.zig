@@ -1,10 +1,13 @@
 // We are doing sv39
 // XXX: Zig 0.11 to memset
-const printf = @import("uart.zig").printf;
-
 const mem = @import("std").mem;
+
+const riscv_asm = @import("asm.zig");
 const memlist = @import("freelist.zig");
 const memlayout = @import("memlayout.zig");
+
+const printf = @import("uart.zig").printf;
+
 const PAGE_SIZE = memlist.PAGE_SIZE;
 // XXX: sign extend??
 const MAX_VA = (1 << 39) - 1;
@@ -17,7 +20,7 @@ extern const _text_start: u8;
 extern const _text_end: u8;
 extern const _kernel_end: u8;
 
-pub fn kvmInit() pagetable_t {
+pub fn kvmInit() void {
     const loced = memlist.kalloc() catch unreachable;
     const kpgt = @ptrCast(pagetable_t, @alignCast(@alignOf(pagetable_t), loced));
     mem.set(pagetable_entry_t, kpgt, 0);
@@ -32,7 +35,10 @@ pub fn kvmInit() pagetable_t {
     const kernel_end = @ptrToInt(&_kernel_end);
     map(kpgt, text_end, text_end, PTE_R | PTE_W, kernel_end - text_end);
 
-    return kpgt;
+    // Map uart and write to virtual address to test out
+    // TODO: remove
+    map(kpgt, 0x2000, memlayout.UART0, PTE_R | PTE_W, PAGE_SIZE);
+    setSatp(kpgt);
 }
 
 // Pagetable Entry bits: D A G U X W R V
@@ -60,6 +66,10 @@ fn pteToAddr(pte: pagetable_entry_t) u64 {
     return ppn * PAGE_SIZE;
 }
 
+inline fn pa_to_ppn(pa: u64) u64 {
+    return pa >> 12;
+}
+
 fn pteToPagetable(pte: pagetable_entry_t) pagetable_t {
     const address = pteToAddr(pte);
     return @intToPtr(pagetable_t, address);
@@ -67,12 +77,12 @@ fn pteToPagetable(pte: pagetable_entry_t) pagetable_t {
 
 fn pagetableToPte(pagetable: pagetable_t) pagetable_entry_t {
     const addr = @ptrToInt(pagetable);
-    const ppn = addr >> 12;
+    const ppn = pa_to_ppn(addr);
     return ppn << 10;
 }
 
 fn paToPte(pa: u64) pagetable_entry_t {
-    const ppn = pa >> 12;
+    const ppn = pa_to_ppn(pa);
     return ppn << 10;
 }
 
@@ -167,4 +177,16 @@ pub fn printPgEntries(root_pg: pagetable_t) void {
             }
         }
     }
+}
+
+fn setSatp(root: pagetable_t) void {
+    // We use sv39 -> Mode = 8
+    const mode = 8 << 60;
+    // We flush the cache when we switch, so we don't use ASID
+    const ppn = pa_to_ppn(@ptrToInt(root));
+    const satp = mode | ppn;
+
+    riscv_asm.flushAllSfence();
+    riscv_asm.writeSatp(satp);
+    riscv_asm.flushAllSfence();
 }

@@ -30,7 +30,7 @@ bss_clear:
     # interrupts later
     # la      t1, kmain
     # csrw    mepc, t1
-    tail kmain
+    tail setup
 
 wait_for_interrupt:
     wfi
