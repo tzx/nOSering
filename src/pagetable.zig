@@ -35,9 +35,6 @@ pub fn kvmInit() void {
     const kernel_end = @ptrToInt(&_kernel_end);
     map(kpgt, text_end, text_end, PTE_R | PTE_W, kernel_end - text_end);
 
-    // Map uart and write to virtual address to test out
-    // TODO: remove
-    map(kpgt, 0x2000, memlayout.UART0, PTE_R | PTE_W, PAGE_SIZE);
     setSatp(kpgt);
 }
 

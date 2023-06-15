@@ -45,6 +45,43 @@ pub inline fn writeSatp(val: u64) void {
     );
 }
 
+pub inline fn writeMtvec(func: *const fn () void) void {
+    const val = @ptrToInt(func);
+    asm volatile ("csrw mtvec, %[arg1]"
+        :
+        : [arg1] "r" (val),
+    );
+}
+
+pub inline fn writeStvec(func: *const fn () void) void {
+    const val = @ptrToInt(func);
+    asm volatile ("csrw stvec, %[arg1]"
+        :
+        : [arg1] "r" (val),
+    );
+}
+
+pub inline fn writeMideleg(val: u64) void {
+    asm volatile ("csrw mideleg, %[arg1]"
+        :
+        : [arg1] "r" (val),
+    );
+}
+
+pub inline fn writeMedeleg(val: u64) void {
+    asm volatile ("csrw medeleg, %[arg1]"
+        :
+        : [arg1] "r" (val),
+    );
+}
+
+pub inline fn writeSie(val: u64) void {
+    asm volatile ("csrw sie, %[arg1]"
+        :
+        : [arg1] "r" (val),
+    );
+}
+
 pub inline fn flushAllSfence() void {
     asm volatile ("sfence.vma zero, zero");
 }

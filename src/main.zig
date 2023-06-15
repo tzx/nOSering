@@ -19,6 +19,7 @@ fn kmain() noreturn {
 
     // TODO: remove
     uart.uartPutc(0x2000, 'x');
+    uart.printf("hi", .{});
     @panic("You reached kmain!");
 }
 
@@ -29,7 +30,7 @@ export fn setup() noreturn {
     // Set MPP to Supervisor mode when we mret
     const new_mstatus = (mstatus & ~@intCast(u64, riscv_asm.MPP_MASK)) | riscv_asm.MPP_S;
     riscv_asm.writeMstatus(new_mstatus);
-
+    // Go to kmain when we mret
     riscv_asm.writeMepc(&kmain);
 
     // https://stackoverflow.com/questions/69133848/risc-v-illegal-instruction-exception-when-switching-to-supervisor-mode
@@ -37,8 +38,38 @@ export fn setup() noreturn {
     // https://github.com/qemu/qemu/commit/d102f19a2085ac931cb998e6153b73248cca49f1
     pmpInit();
 
+    // Delegate all (*possible) interrupts and exceptions to supervisor mode
+    // Possible as some interrupts/exceptions cannot be delegated (i.e machine
+    // interrupts/calls + the more important timer interrupts
+    riscv_asm.writeMideleg(0b001000100010);
+    riscv_asm.writeMedeleg(0b1011001111111111);
+
+    // Enable all possible interrupts in supervisor mode
+    riscv_asm.writeSie(0b1000100010);
+    // We have not setup turning on interrupts (need to set sstatus)
+    // Remember interrupts != exceptions; Exceptions usually cannot be disabled
+
+    // Trap handler
+    const trap_handler = &trapTest;
+    if (@typeInfo(@TypeOf(trap_handler)).Pointer.alignment != 4) {
+        @panic("function is not aligned by 4");
+    }
+    riscv_asm.writeMtvec(trap_handler);
+    riscv_asm.writeStvec(&ktrapTest);
+
     asm volatile ("mret");
     unreachable;
+}
+
+// TODO: remove
+// must be aligned(4)
+fn trapTest() align(0b100) void {
+    uart.printf("you are trapped!\n", .{});
+}
+
+fn ktrapTest() align(0b100) void {
+    uart.printf("you are kernel trapped!\n", .{});
+    asm volatile ("sret");
 }
 
 // Set PMP entry 0 to TOR max address, so supervisor mode can access all addresses
