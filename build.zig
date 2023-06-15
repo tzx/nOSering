@@ -17,6 +17,8 @@ pub fn build(b: *std.build.Builder) void {
     const exe = b.addExecutable("nosering", "src/main.zig");
     exe.code_model = .medium;
     exe.addAssemblyFile("src/entry.S");
+    // Let's not do this yet
+    // exe.addAssemblyFile("src/trampoline.S");
     exe.setLinkerScriptPath(std.build.FileSource{ .path = "src/linker.ld" });
     exe.setTarget(target);
     exe.setBuildMode(mode);

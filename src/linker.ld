@@ -29,6 +29,12 @@ SECTIONS
   .text : ALIGN(4K) {
     *(.text.init);
     *(.text);
+    _trampoline = .;
+    /* TODO: Let's not do this yet
+    *(.trampoline);
+    . = ALIGN(4K);
+    ASSERT(. - _trampoline == 0x1000, "error: trampoline doesn't fit inside page");
+    */
   } >ram :ram_fakerom
 
   .rodata : ALIGN(4K) {

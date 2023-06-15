@@ -18,8 +18,8 @@ fn kmain() noreturn {
     pagetable.kvmInit();
 
     // TODO: remove
-    uart.uartPutc(0x2000, 'x');
-    uart.printf("hi", .{});
+    // uart.uartPutc(0x2000, 'x');
+    // uart.printf("hi", .{});
     @panic("You reached kmain!");
 }
 
