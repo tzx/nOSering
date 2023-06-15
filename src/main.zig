@@ -3,6 +3,9 @@ const uart = @import("uart.zig");
 const freelist = @import("freelist.zig");
 const pagetable = @import("pagetable.zig");
 const riscv_asm = @import("asm.zig");
+const kernelTrap = @import("trap.zig").kernelTrap;
+
+extern const kernelvec: u8;
 
 pub fn panic(message: []const u8, _: ?*builtin.StackTrace, _: ?usize) noreturn {
     uart.printf("\nPANIC MESSAGE:\n", .{});
@@ -17,9 +20,9 @@ fn kmain() noreturn {
     freelist.initFreeList();
     pagetable.kvmInit();
 
-    // TODO: remove
-    // uart.uartPutc(0x2000, 'x');
-    // uart.printf("hi", .{});
+    const ptr = @intToPtr(*volatile u8, 0x2000);
+    ptr.* = 'x';
+    uart.printf("hi", .{});
     @panic("You reached kmain!");
 }
 
@@ -55,7 +58,7 @@ export fn setup() noreturn {
         @panic("function is not aligned by 4");
     }
     riscv_asm.writeMtvec(trap_handler);
-    riscv_asm.writeStvec(&ktrapTest);
+    riscv_asm.writeStvec(@ptrToInt(&kernelvec));
 
     asm volatile ("mret");
     unreachable;
@@ -65,11 +68,6 @@ export fn setup() noreturn {
 // must be aligned(4)
 fn trapTest() align(0b100) void {
     uart.printf("you are trapped!\n", .{});
-}
-
-fn ktrapTest() align(0b100) void {
-    uart.printf("you are kernel trapped!\n", .{});
-    asm volatile ("sret");
 }
 
 // Set PMP entry 0 to TOR max address, so supervisor mode can access all addresses
@@ -82,4 +80,8 @@ inline fn pmpInit() void {
     // We want the max address as TOR, so we set all 54 bits to 1 (2 ** 54 - 1)
     const top_addr = (1 << 54) - 1;
     riscv_asm.writePmpaddr0(top_addr);
+}
+
+comptime {
+    @export(kernelTrap, .{ .name = "kerneltrap", .linkage = .Strong });
 }

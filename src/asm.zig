@@ -45,6 +45,7 @@ pub inline fn writeSatp(val: u64) void {
     );
 }
 
+// TODO: just set the value
 pub inline fn writeMtvec(func: *const fn () void) void {
     const val = @ptrToInt(func);
     asm volatile ("csrw mtvec, %[arg1]"
@@ -53,9 +54,21 @@ pub inline fn writeMtvec(func: *const fn () void) void {
     );
 }
 
-pub inline fn writeStvec(func: *const fn () void) void {
-    const val = @ptrToInt(func);
+pub inline fn writeStvec(val: u64) void {
     asm volatile ("csrw stvec, %[arg1]"
+        :
+        : [arg1] "r" (val),
+    );
+}
+
+pub inline fn readSepc() u64 {
+    return asm volatile ("csrr %[ret], sepc"
+        : [ret] "=r" (-> u64),
+    );
+}
+
+pub inline fn writeSepc(val: u64) void {
+    asm volatile ("csrw sepc, %[arg1]"
         :
         : [arg1] "r" (val),
     );

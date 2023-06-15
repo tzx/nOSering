@@ -1,4 +1,4 @@
-const PAGE_SIZE = @import("memlist.zig").PAGE_SIZE;
+const PAGE_SIZE = @import("freelist.zig").PAGE_SIZE;
 
 pub const UART0 = 0x1000_0000;
 pub const VIRTIO0 = 0x1000_1000;
