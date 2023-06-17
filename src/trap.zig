@@ -14,8 +14,15 @@ pub export fn kernelTrap() void {
     const epc = riscv_asm.readSepc();
     printf("you are kernel trapped! epc: {x}\n", .{epc});
 
-    // Go to next instruction in the trap
-    riscv_asm.writeSepc(epc + 4);
+    // Remove software interrupt bit
+    const val = 0x02;
+    asm volatile ("csrc sip, %[arg1]"
+        :
+        : [arg1] "r" (val),
+    );
+
+    // TODO: change: Go to next instruction in the trap
+    // riscv_asm.writeSepc(epc + 4);
 }
 
 pub export fn machineTrap() void {

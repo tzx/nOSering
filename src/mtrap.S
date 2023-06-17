@@ -24,7 +24,8 @@ machinevec:
   # STIP is not writable in SIP. We are *not* using an SBI to interface with 
   # SEE. SSIP, however, is writable in supervisor mode.
 
-  li t1, 0x20
+  li t1, 0x02
+  # the SSIP bits in mip and sip seem to correspond, at least in QEMU
   csrs mip, t1
 
   # Restore registers

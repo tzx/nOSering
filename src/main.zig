@@ -13,7 +13,7 @@ pub fn panic(message: []const u8, _: ?*builtin.StackTrace, _: ?usize) noreturn {
     uart.printf("{s}", .{message});
     uart.printf("\n", .{});
 
-    // while (true) {}
+    while (true) {}
     var i: usize = 1;
     while (true) {
         uart.printf("shit: {x}\n", .{i});
