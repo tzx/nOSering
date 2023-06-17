@@ -3,6 +3,19 @@ pub const MPP_U = 0b00 << 11;
 pub const MPP_S = 0b01 << 11;
 pub const MPP_M = 0b10 << 11;
 
+pub inline fn readMhartid() u64 {
+    return asm volatile ("csrr %[ret], mhartid"
+        : [ret] "=r" (-> u64),
+    );
+}
+
+pub inline fn writeMscratch(val: u64) void {
+    asm volatile ("csrw mscratch, %[arg1]"
+        :
+        : [arg1] "r" (val),
+    );
+}
+
 pub inline fn readMstatus() u64 {
     return asm volatile ("csrr %[ret], mstatus"
         : [ret] "=r" (-> u64),

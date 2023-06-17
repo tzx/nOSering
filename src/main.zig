@@ -13,6 +13,7 @@ pub fn panic(message: []const u8, _: ?*builtin.StackTrace, _: ?usize) noreturn {
     uart.printf("{s}", .{message});
     uart.printf("\n", .{});
 
+    // while (true) {}
     var i: usize = 1;
     while (true) {
         uart.printf("shit: {x}\n", .{i});
@@ -62,14 +63,8 @@ export fn setup() noreturn {
     riscv_asm.writeMtvec(@ptrToInt(&machinevec));
     riscv_asm.writeStvec(@ptrToInt(&kernelvec));
 
-    // TODO: this is really shit
-    // https://pdos.csail.mit.edu/6.1810/2021/readings/FU540-C000-v1.0.pdf
-    const mtimecmp0 = @intToPtr(*u64, 0x200_4000);
-    mtimecmp0.* = 2000000;
     // Enable timer interrupts
-    // TODO: csrs??
-    // riscv_asm.writeMstatus(riscv_asm.readMstatus() | 0x8);
-    riscv_asm.writeMie(riscv_asm.readMie() | 0x80);
+    timerInit();
 
     asm volatile ("mret");
     unreachable;
@@ -85,6 +80,24 @@ inline fn pmpInit() void {
     // We want the max address as TOR, so we set all 54 bits to 1 (2 ** 54 - 1)
     const top_addr = (1 << 54) - 1;
     riscv_asm.writePmpaddr0(top_addr);
+}
+
+fn timerInit() void {
+    const cpu_id = riscv_asm.readMhartid();
+    const scratch = trap.mtrap_scratch[cpu_id][0..];
+
+    // TODO: generalize to more CPUS
+    const cmp = 0x200_4000;
+    const ptr = @intToPtr(*u64, cmp);
+    ptr.* = 2000000;
+
+    scratch[0] = cmp;
+    scratch[1] = 100000;
+
+    riscv_asm.writeMscratch(@ptrToInt(scratch));
+    riscv_asm.writeMie(riscv_asm.readMie() | 0x80);
+    // Need to enable SIE so timer interrupts happens
+    riscv_asm.writeMstatus(riscv_asm.readMstatus() | 0x02);
 }
 
 comptime {

@@ -1,6 +1,14 @@
+const consts = @import("consts.zig");
 const riscv_asm = @import("asm.zig");
 
 const printf = @import("uart.zig").printf;
+
+// 0. stores the clint's cmp
+// 1. stores the interval to increment
+// [2..=3]. temp space to store registers
+const mtrap_single_scratch_t = [4]u64;
+const mtrap_scratch_t = [consts.MAX_CPUS]mtrap_single_scratch_t;
+pub var mtrap_scratch: mtrap_scratch_t = undefined;
 
 pub export fn kernelTrap() void {
     const epc = riscv_asm.readSepc();
