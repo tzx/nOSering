@@ -3,25 +3,30 @@ const uart = @import("uart.zig");
 const freelist = @import("freelist.zig");
 const pagetable = @import("pagetable.zig");
 const riscv_asm = @import("asm.zig");
-const kernelTrap = @import("trap.zig").kernelTrap;
+const trap = @import("trap.zig");
 
 extern const kernelvec: u8;
+extern const machinevec: u8;
 
 pub fn panic(message: []const u8, _: ?*builtin.StackTrace, _: ?usize) noreturn {
     uart.printf("\nPANIC MESSAGE:\n", .{});
     uart.printf("{s}", .{message});
     uart.printf("\n", .{});
 
-    while (true) {}
+    var i: usize = 1;
+    while (true) {
+        uart.printf("shit: {x}\n", .{i});
+        i += 1;
+    }
 }
 
 fn kmain() noreturn {
     uart.printf("kmain\n", .{});
-    freelist.initFreeList();
-    pagetable.kvmInit();
+    // freelist.initFreeList();
+    // pagetable.kvmInit();
 
-    const ptr = @intToPtr(*volatile u8, 0x2000);
-    ptr.* = 'x';
+    // const ptr = @intToPtr(*volatile u8, 0x2000);
+    // ptr.* = 'x';
     uart.printf("hi", .{});
     @panic("You reached kmain!");
 }
@@ -30,6 +35,7 @@ export fn setup() noreturn {
     uart.uartInit();
     uart.printf("setup\n", .{});
     const mstatus = riscv_asm.readMstatus();
+    // TODO: is it possible to do csrs?
     // Set MPP to Supervisor mode when we mret
     const new_mstatus = (mstatus & ~@intCast(u64, riscv_asm.MPP_MASK)) | riscv_asm.MPP_S;
     riscv_asm.writeMstatus(new_mstatus);
@@ -41,6 +47,7 @@ export fn setup() noreturn {
     // https://github.com/qemu/qemu/commit/d102f19a2085ac931cb998e6153b73248cca49f1
     pmpInit();
 
+    // TODO: magic numbers move to -> asm.zig
     // Delegate all (*possible) interrupts and exceptions to supervisor mode
     // Possible as some interrupts/exceptions cannot be delegated (i.e machine
     // interrupts/calls + the more important timer interrupts
@@ -49,25 +56,23 @@ export fn setup() noreturn {
 
     // Enable all possible interrupts in supervisor mode
     riscv_asm.writeSie(0b1000100010);
-    // We have not setup turning on interrupts (need to set sstatus)
     // Remember interrupts != exceptions; Exceptions usually cannot be disabled
 
-    // Trap handler
-    const trap_handler = &trapTest;
-    if (@typeInfo(@TypeOf(trap_handler)).Pointer.alignment != 4) {
-        @panic("function is not aligned by 4");
-    }
-    riscv_asm.writeMtvec(trap_handler);
+    // Trap handlers
+    riscv_asm.writeMtvec(@ptrToInt(&machinevec));
     riscv_asm.writeStvec(@ptrToInt(&kernelvec));
+
+    // TODO: this is really shit
+    // https://pdos.csail.mit.edu/6.1810/2021/readings/FU540-C000-v1.0.pdf
+    const mtimecmp0 = @intToPtr(*u64, 0x200_4000);
+    mtimecmp0.* = 2000000;
+    // Enable timer interrupts
+    // TODO: csrs??
+    // riscv_asm.writeMstatus(riscv_asm.readMstatus() | 0x8);
+    riscv_asm.writeMie(riscv_asm.readMie() | 0x80);
 
     asm volatile ("mret");
     unreachable;
-}
-
-// TODO: remove
-// must be aligned(4)
-fn trapTest() align(0b100) void {
-    uart.printf("you are trapped!\n", .{});
 }
 
 // Set PMP entry 0 to TOR max address, so supervisor mode can access all addresses
@@ -83,5 +88,6 @@ inline fn pmpInit() void {
 }
 
 comptime {
-    @export(kernelTrap, .{ .name = "kerneltrap", .linkage = .Strong });
+    @export(trap.kernelTrap, .{ .name = "kerneltrap", .linkage = .Strong });
+    @export(trap.machineTrap, .{ .name = "machinetrap", .linkage = .Strong });
 }

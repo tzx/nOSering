@@ -18,6 +18,7 @@ pub fn build(b: *std.build.Builder) void {
     exe.code_model = .medium;
     exe.addAssemblyFile("src/entry.S");
     exe.addAssemblyFile("src/ktrap.S");
+    exe.addAssemblyFile("src/mtrap.S");
     // Let's not do this yet
     // exe.addAssemblyFile("src/trampoline.S");
     exe.setLinkerScriptPath(std.build.FileSource{ .path = "src/linker.ld" });

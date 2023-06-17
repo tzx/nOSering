@@ -1,5 +1,3 @@
-.extern kernelTrap
-
 .global kernelvec
 .align 4
 kernelvec:
@@ -40,7 +38,7 @@ kernelvec:
   sd x31, 248(sp)
 
   call kernelTrap
-  
+
   /* Restore all registers other than x4(tp) in case we changed CPUs during
    * interrupt */
 

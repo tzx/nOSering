@@ -9,3 +9,7 @@ pub export fn kernelTrap() void {
     // Go to next instruction in the trap
     riscv_asm.writeSepc(epc + 4);
 }
+
+pub export fn machineTrap() void {
+    printf("you are machine trapped!\n", .{});
+}
