@@ -14,3 +14,17 @@ pub fn plicInit() void {
     const smode_threshold = @intToPtr(*u32, memlayout.PLIC + 0x20_1000 + 0x2000 * cpu_id);
     smode_threshold.* = 0;
 }
+
+pub fn plicClaim() u32 {
+    // TODO: cpu hartid
+    const hart_id = 0;
+    const irq_p = @intToPtr(*u32, memlayout.PLIC + 0x201004 + 0x2000 * hart_id);
+    return irq_p.*;
+}
+
+pub fn plicComplete(irq: u32) void {
+    // TODO: cpu hartid
+    const hart_id = 0;
+    const irq_p = @intToPtr(*u32, memlayout.PLIC + 0x201004 + 0x2000 * hart_id);
+    irq_p.* = irq;
+}

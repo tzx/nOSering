@@ -1,5 +1,6 @@
 const consts = @import("consts.zig");
 const riscv_asm = @import("asm.zig");
+const plic = @import("plic.zig");
 
 const printf = @import("uart.zig").printf;
 
@@ -15,6 +16,18 @@ pub export fn kernelTrap() void {
     const scause = riscv_asm.readScause();
     printf("you are kernel trapped! epc: {x}, scause: {x}\n", .{ epc, scause });
 
+    // Interrupt
+    if (scause & 1 << 63 != 0) {
+        // TODO: magic number?
+        if (scause & 0xff == 9) {
+            const irq = plic.plicClaim();
+            printf("irq: {d}\n", .{irq});
+            plic.plicComplete(irq);
+        }
+    } else { // Exception
+    }
+
+    // TODO: move this into the if
     // Remove software interrupt bit
     const val = 0x02;
     asm volatile ("csrc sip, %[arg1]"
