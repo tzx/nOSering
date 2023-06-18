@@ -42,7 +42,12 @@ fn uartGetc(base_addr: usize) ?u8 {
 pub fn handleUartIntr() void {
     while (uartGetc(UART_BASE_ADDRESS)) |c_| {
         const c = if (c_ == '\r') '\n' else c_;
-        uartPutc(UART_BASE_ADDRESS, c);
+        if (c == 0x7f) { // backspace or delete
+            // We do a destructive backspace
+            print(&[3]u8{ 0x08, ' ', 0x08 });
+        } else {
+            uartPutc(UART_BASE_ADDRESS, c);
+        }
     }
 }
 
