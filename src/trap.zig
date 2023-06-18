@@ -1,6 +1,7 @@
 const consts = @import("consts.zig");
 const riscv_asm = @import("asm.zig");
 const plic = @import("plic.zig");
+const uart = @import("uart.zig");
 
 const printf = @import("uart.zig").printf;
 
@@ -12,16 +13,14 @@ const mtrap_scratch_t = [consts.MAX_CPUS]mtrap_single_scratch_t;
 pub var mtrap_scratch: mtrap_scratch_t = undefined;
 
 pub export fn kernelTrap() void {
-    const epc = riscv_asm.readSepc();
     const scause = riscv_asm.readScause();
-    printf("you are kernel trapped! epc: {x}, scause: {x}\n", .{ epc, scause });
 
     // Interrupt
     if (scause & 1 << 63 != 0) {
         // TODO: magic number?
         if (scause & 0xff == 9) {
             const irq = plic.plicClaim();
-            printf("irq: {d}\n", .{irq});
+            uart.handleUartIntr();
             plic.plicComplete(irq);
         }
     } else { // Exception

@@ -30,6 +30,24 @@ fn uartPutc(base_addr: usize, c: u8) void {
     uart[0] = c;
 }
 
+fn uartGetc(base_addr: usize) ?u8 {
+    var uart = @intToPtr([*]volatile u8, base_addr)[0..8];
+    // There's a character
+    if (uart[5] & 1 != 0) {
+        return uart[0];
+    }
+    return null;
+}
+
+pub fn handleUartIntr() void {
+    while (uartGetc(UART_BASE_ADDRESS)) |c_| {
+        const c = if (c_ == '\r') '\n' else c_;
+        uartPutc(UART_BASE_ADDRESS, c);
+    }
+}
+
+// TODO: move this to own file
+
 fn print(str: []const u8) void {
     for (str) |c| {
         uartPutc(UART_BASE_ADDRESS, c);
