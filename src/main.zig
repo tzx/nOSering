@@ -14,21 +14,13 @@ pub fn panic(message: []const u8, _: ?*builtin.StackTrace, _: ?usize) noreturn {
     uart.printf("\n", .{});
 
     while (true) {}
-    var i: usize = 1;
-    while (true) {
-        uart.printf("shit: {x}\n", .{i});
-        i += 1;
-    }
 }
 
 fn kmain() noreturn {
     uart.printf("kmain\n", .{});
-    // freelist.initFreeList();
-    // pagetable.kvmInit();
+    freelist.initFreeList();
+    pagetable.kvmInit();
 
-    // const ptr = @intToPtr(*volatile u8, 0x2000);
-    // ptr.* = 'x';
-    uart.printf("hi", .{});
     @panic("You reached kmain!");
 }
 
@@ -36,7 +28,6 @@ export fn setup() noreturn {
     uart.uartInit();
     uart.printf("setup\n", .{});
     const mstatus = riscv_asm.readMstatus();
-    // TODO: is it possible to do csrs?
     // Set MPP to Supervisor mode when we mret
     const new_mstatus = (mstatus & ~@intCast(u64, riscv_asm.MPP_MASK)) | riscv_asm.MPP_S;
     riscv_asm.writeMstatus(new_mstatus);
@@ -48,15 +39,17 @@ export fn setup() noreturn {
     // https://github.com/qemu/qemu/commit/d102f19a2085ac931cb998e6153b73248cca49f1
     pmpInit();
 
-    // TODO: magic numbers move to -> asm.zig
     // Delegate all (*possible) interrupts and exceptions to supervisor mode
     // Possible as some interrupts/exceptions cannot be delegated (i.e machine
     // interrupts/calls + the more important timer interrupts
-    riscv_asm.writeMideleg(0b001000100010);
-    riscv_asm.writeMedeleg(0b1011001111111111);
+    //
+    // Put S-mode interrupts to S-mode
+    riscv_asm.writeMideleg(riscv_asm.MCAUSE_I_SSI | riscv_asm.MCAUSE_I_STI | riscv_asm.MCAUSE_I_SEI);
+    // Put all possible exceptions to S-mode
+    riscv_asm.writeMedeleg(riscv_asm.MCAUSE_E_ALL_POSSIBLE_SMODE);
 
     // Enable all possible interrupts in supervisor mode
-    riscv_asm.writeSie(0b1000100010);
+    riscv_asm.writeSie(riscv_asm.IEIP_SS | riscv_asm.IEIP_ST | riscv_asm.IEIP_SE);
     // Remember interrupts != exceptions; Exceptions usually cannot be disabled
 
     // Trap handlers
@@ -73,7 +66,8 @@ export fn setup() noreturn {
 // Set PMP entry 0 to TOR max address, so supervisor mode can access all addresses
 inline fn pmpInit() void {
     // We set everything on and use TOR; we only set pmp0cfg
-    const cfg0 = 0b10001111;
+    // L = 1, A = 1, X = 1, W = 1, R = 1
+    const cfg0 = 0x8f;
     riscv_asm.writePmpcfg0(cfg0);
 
     // For RV64, each PMP address register encodes bits 55-2 of a 56-bit physical address
@@ -90,14 +84,15 @@ fn timerInit() void {
     const cmp = 0x200_4000;
     const ptr = @intToPtr(*u64, cmp);
     ptr.* = 2000000;
-
     scratch[0] = cmp;
-    scratch[1] = 100000;
+    const interval = 100000;
+    scratch[1] = interval;
 
     riscv_asm.writeMscratch(@ptrToInt(scratch));
-    riscv_asm.writeMie(riscv_asm.readMie() | 0x80);
+    riscv_asm.writeMie(riscv_asm.readMie() | riscv_asm.IEIP_MT);
+
     // Need to enable SIE so timer interrupts happens
-    riscv_asm.writeMstatus(riscv_asm.readMstatus() | 0x02);
+    // riscv_asm.writeMstatus(riscv_asm.readMstatus() | 0x02);
 }
 
 comptime {
