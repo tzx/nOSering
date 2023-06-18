@@ -2,6 +2,7 @@ const builtin = @import("std").builtin;
 const uart = @import("uart.zig");
 const freelist = @import("freelist.zig");
 const pagetable = @import("pagetable.zig");
+const plic = @import("plic.zig");
 const riscv_asm = @import("asm.zig");
 const trap = @import("trap.zig");
 
@@ -20,6 +21,7 @@ fn kmain() noreturn {
     uart.printf("kmain\n", .{});
     freelist.initFreeList();
     pagetable.kvmInit();
+    plic.plicInit();
 
     @panic("You reached kmain!");
 }
@@ -85,14 +87,15 @@ fn timerInit() void {
     const ptr = @intToPtr(*u64, cmp);
     ptr.* = 2000000;
     scratch[0] = cmp;
-    const interval = 100000;
+    const interval = 10000000000;
     scratch[1] = interval;
 
     riscv_asm.writeMscratch(@ptrToInt(scratch));
     riscv_asm.writeMie(riscv_asm.readMie() | riscv_asm.IEIP_MT);
 
-    // Need to enable SIE so timer interrupts happens
-    // riscv_asm.writeMstatus(riscv_asm.readMstatus() | 0x02);
+    // Need to enable SIE so timer interrupts happens in SUPERVISOR MODE
+    // TODO: maybe when we reach init, we turn this off
+    riscv_asm.writeMstatus(riscv_asm.readMstatus() | 0x02);
 }
 
 comptime {

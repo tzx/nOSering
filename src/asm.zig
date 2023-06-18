@@ -120,6 +120,7 @@ pub inline fn writeMie(val: u64) void {
     );
 }
 
+// TODO: MCAUSE -> CAUSE
 // Flags for MCAUSE, used for mideleg and medeleg
 // We don't set the flag to indicate if interrupt
 pub const MCAUSE_I_USI = 1 << 0;
@@ -175,5 +176,11 @@ pub inline fn writeMedeleg(val: u64) void {
     asm volatile ("csrw medeleg, %[arg1]"
         :
         : [arg1] "r" (val),
+    );
+}
+
+pub inline fn readScause() u64 {
+    return asm volatile ("csrr %[ret], scause"
+        : [ret] "=r" (-> u64),
     );
 }

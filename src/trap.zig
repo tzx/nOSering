@@ -12,7 +12,8 @@ pub var mtrap_scratch: mtrap_scratch_t = undefined;
 
 pub export fn kernelTrap() void {
     const epc = riscv_asm.readSepc();
-    printf("you are kernel trapped! epc: {x}\n", .{epc});
+    const scause = riscv_asm.readScause();
+    printf("you are kernel trapped! epc: {x}, scause: {x}\n", .{ epc, scause });
 
     // Remove software interrupt bit
     const val = 0x02;
