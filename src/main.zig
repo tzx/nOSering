@@ -5,6 +5,7 @@ const pagetable = @import("pagetable.zig");
 const plic = @import("plic.zig");
 const riscv_asm = @import("asm.zig");
 const trap = @import("trap.zig");
+const virtio_disk = @import("virtio_disk.zig");
 
 extern const kernelvec: u8;
 extern const machinevec: u8;
@@ -22,6 +23,7 @@ fn kmain() noreturn {
     freelist.initFreeList();
     pagetable.kvmInit();
     plic.plicInit();
+    virtio_disk.virtioDiskInit();
 
     @panic("You reached kmain!");
 }

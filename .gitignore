@@ -4,3 +4,8 @@ build/
 build-*/
 docgen_tmp/
 .direnv/
+
+qemu.dtb
+test.img
+
+DOCS.md
