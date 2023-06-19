@@ -48,6 +48,13 @@ const VirtioRegisters = extern struct {
     config_generation: u32,
     // https://en.wikipedia.org/wiki/Flexible_array_member; we just assume it has 1 lol
     config: [1]u32,
+
+    comptime {
+        const debug = @import("std").debug;
+        const mmio_end = 0x100;
+        // All bytes to the end + the bytes (u32) of the last address
+        debug.assert(@sizeOf(@This()) == mmio_end + @sizeOf(u32));
+    }
 };
 
 const VirtioCapability = struct {
