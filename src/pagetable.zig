@@ -18,7 +18,7 @@ const pagetable_entry_t = u64;
 
 extern const _text_start: u8;
 extern const _text_end: u8;
-extern const _kernel_end: u8;
+extern const _PHYSTOP: u8;
 
 pub fn kvmInit() void {
     const loced = memlist.kalloc() catch unreachable;
@@ -32,8 +32,8 @@ pub fn kvmInit() void {
     const text_end = @ptrToInt(&_text_end);
     map(kpgt, text_start, text_start, PTE_R | PTE_X, text_end - text_start);
 
-    const kernel_end = @ptrToInt(&_kernel_end);
-    map(kpgt, text_end, text_end, PTE_R | PTE_W, kernel_end - text_end);
+    const phystop = @ptrToInt(&_PHYSTOP);
+    map(kpgt, text_end, text_end, PTE_R | PTE_W, phystop - text_end);
 
     setSatp(kpgt);
 }
