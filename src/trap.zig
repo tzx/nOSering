@@ -20,9 +20,13 @@ pub export fn kernelTrap() void {
         // TODO: magic number?
         if (scause & 0xff == 9) {
             const irq = plic.plicClaim();
-            uart.handleUartIntr();
+            if (irq == plic.UART_SRC) {
+                uart.handleUartIntr();
+            } else { // TODO: virtio
+                printf("IRQ: {d}\n", .{irq});
+            }
             plic.plicComplete(irq);
-        }
+        } else {}
     } else { // Exception
     }
 
