@@ -1,5 +1,7 @@
-const printf = @import("uart.zig").printf;
+const std = @import("std");
 
+const printf = @import("uart.zig").printf;
+const freelist = @import("freelist.zig");
 const VIRTIO_BASE_ADDR = @import("memlayout.zig").VIRTIO0;
 
 // All from QEMU
@@ -9,6 +11,14 @@ const REQUIRED_BLOCK_DEVICE_ID = 0x2;
 const REQUIRED_VENDOR_ID = 0x554d4551;
 
 const VIRTIO_BLK_F_RO = 5;
+
+const VIRTIO_BLK_T_IN = 0;
+const VIRTIO_BLK_T_OUT = 1;
+
+const VIRTQ_DESC_F_NEXT = 1;
+const VIRTQ_DESC_F_WRITE = 2;
+
+const QUEUE_SIZE = 64;
 
 // XXX: Zig's packed struct does not allow arrays
 // https://github.com/ziglang/zig/issues/12547
@@ -134,10 +144,54 @@ const DEVICE_STATUS_FEATURES_OK = 8;
 const DEVICE_STATUS_DRIVER_OK = 4;
 const DEVICE_STATUS_NEEDS_RESET = 64;
 
+const VirtqDesc = extern struct {
+    addr: u64,
+    len: u32,
+    flags: u16,
+    next: u16,
+};
+
+const VirtqAvail = extern struct {
+    flags: u16,
+    idx: u16,
+    ring: [QUEUE_SIZE]u16,
+};
+
+const VirtqUsed = extern struct {
+    const VirtqUsedElement = extern struct {
+        id: u32,
+        len: u32,
+    };
+    flags: u16,
+    idx: u16,
+    ring: [QUEUE_SIZE]VirtqUsedElement,
+};
+
+const VirtioBlkReqHeader = extern struct {
+    type: u32,
+    reserved: u32,
+    sector: u64,
+};
+
+const disk = struct {
+    var virtq_desc: ?*[QUEUE_SIZE]VirtqDesc = null;
+    var virtq_avail: ?*VirtqAvail = null;
+    var virtq_used: ?*VirtqUsed = null;
+
+    // Have data structure that has space for
+    // buf0 (type, reserved, sector) and buf2 (status)
+    // buf1 is what we read/write, so that's not in this data structure
+    // for each descriptor
+    // TODO: actually i think we need buf1 because of interrupts
+    var headers = std.mem.zeroes([QUEUE_SIZE]VirtioBlkReqHeader);
+    var status = std.mem.zeroes([QUEUE_SIZE]u8);
+};
+
+const regs = @intToPtr(*volatile VirtioRegisters, VIRTIO_BASE_ADDR);
+
 // TODO: this currently only does VIRTIO0
 // Which is actually fine b/c we only have one
 pub fn virtioDiskInit() void {
-    const regs = @intToPtr(*volatile VirtioRegisters, VIRTIO_BASE_ADDR);
     if (regs.magic_value != REQUIRED_MAGIC_VAL or
         regs.version != REQUIRED_VERSION or
         regs.device_id != REQUIRED_BLOCK_DEVICE_ID or
@@ -154,7 +208,7 @@ pub fn virtioDiskInit() void {
     // Driver
     regs.status = regs.status | DEVICE_STATUS_DRIVER;
     // Set Features
-    virtioSetFeatures(regs);
+    virtioBlkSetFeatures();
     // Features OK
     regs.status = regs.status | DEVICE_STATUS_FEATURES_OK;
     // Reread device status to see if features_ok is set
@@ -162,9 +216,11 @@ pub fn virtioDiskInit() void {
         @panic("virtio blk says device does not support features or device is unstable");
     }
     // Do discovery queue
+    virtioBlkConfigVirtqueue();
+    regs.status = regs.status | DEVICE_STATUS_DRIVER_OK;
 }
 
-fn virtioSetFeatures(regs: *volatile VirtioRegisters) void {
+fn virtioBlkSetFeatures() void {
     regs.device_features_sel = 0;
     regs.driver_features_sel = 0;
 
@@ -188,16 +244,96 @@ fn virtioSetFeatures(regs: *volatile VirtioRegisters) void {
     }
 }
 
-inline fn writeReg(p: *volatile u32, val: u32) void {
-    p.* = val;
+fn virtioBlkConfigVirtqueue() void {
+    // Select the queue writing its index (first queue is 0) to QueueSel.
+    // There's only request queue for block device
+    regs.queue_sel = 0;
+    // Check if the queue is not already in use: read QueueReady, and expect a returned value of zero (0x0).
+    if (regs.queue_ready != 0) {
+        @panic("Read queue is not ready for virtio-blk: QueueReady != 0");
+    }
+    // Read maximum queue size (number of elements) from QueueNumMax. If the returned value is zero (0x0) the queue is not available.
+    const queue_num_max = regs.queue_num_max;
+    if (queue_num_max == 0) {
+        @panic("Read queue is not available for virtio-blk: QueueNumMax == 0");
+    }
+    // Allocate and zero the queue memory, making sure the memory is physically contiguous.
+    // 3 parts: Descriptor Table, Available Ring, Used Ring
+    const desc_table = freelist.kalloc() catch unreachable;
+    const avail_ring = freelist.kalloc() catch unreachable;
+    const used_ring = freelist.kalloc() catch unreachable;
+    std.mem.set(u8, desc_table, 0);
+    std.mem.set(u8, avail_ring, 0);
+    std.mem.set(u8, used_ring, 0);
+
+    disk.virtq_desc = @ptrCast(*[QUEUE_SIZE]VirtqDesc, @alignCast(@alignOf(*[QUEUE_SIZE]VirtqDesc), desc_table));
+    disk.virtq_avail = @ptrCast(*VirtqAvail, @alignCast(@alignOf(*VirtqAvail), avail_ring));
+    disk.virtq_used = @ptrCast(*VirtqUsed, @alignCast(@alignOf(*VirtqUsed), used_ring));
+
+    // Notify the device about the queue size by writing the size to QueueNum.
+    // 4096 bytes => 256 max queue size: let's just use 64
+    regs.queue_num = QUEUE_SIZE;
+    // Write physical addresses of the queue’s Descriptor Area, Driver Area and Device Area to (respectively) the QueueDescLow/QueueDescHigh, QueueDriverLow/QueueDriverHigh and QueueDeviceLow/QueueDeviceHigh register pairs.
+    const dt_addr = @ptrToInt(desc_table.ptr);
+    const ar_addr = @ptrToInt(avail_ring.ptr);
+    const ur_addr = @ptrToInt(used_ring.ptr);
+    regs.queue_desc_low = @truncate(u32, dt_addr);
+    regs.queue_desc_high = @truncate(u32, dt_addr >> 32);
+    regs.queue_driver_low = @truncate(u32, ar_addr);
+    regs.queue_driver_high = @truncate(u32, ar_addr >> 32);
+    regs.queue_device_low = @truncate(u32, ur_addr);
+    regs.queue_device_high = @truncate(u32, ur_addr >> 32);
+    // Write 0x1 to QueueReady.
+    regs.queue_ready = 0x1;
 }
 
-inline fn readReg(p: *volatile u32) u32 {
-    return p.*;
+// TODO: WRITE, READ BOOLEAN PROVIDE BUFFER, sector etc
+// Assumes buffer len is u32
+pub fn virtioDiskRW(buf: []u8) void {
+    // TODO: param
+    const sector = 0;
+    // TODO: Need to keep internal structure for free and used index
+    const idx = [_]usize{ 1, 2, 3 };
+
+    var blk_header = &disk.headers[idx[0]];
+    // TODO: bool write
+    blk_header.type = VIRTIO_BLK_T_OUT;
+    // blk_header.reserved = 0;
+    blk_header.sector = sector;
+
+    // 3 Sections: Header, Data, Status Writable sections must come after
+    // readable ones Why 3 sections instead of 2? Data can be readable or
+    // writable depending if we are writing or reading
+
+    disk.virtq_desc.?[idx[0]].addr = @ptrToInt(blk_header);
+    disk.virtq_desc.?[idx[0]].len = @sizeOf(VirtioBlkReqHeader);
+    disk.virtq_desc.?[idx[0]].flags = VIRTQ_DESC_F_NEXT;
+    disk.virtq_desc.?[idx[0]].next = idx[1];
+
+    disk.virtq_desc.?[idx[1]].addr = @ptrToInt(buf.ptr);
+    disk.virtq_desc.?[idx[1]].len = @truncate(u32, buf.len);
+    // TODO: bool write , device writable
+    disk.virtq_desc.?[idx[1]].flags = 0;
+    disk.virtq_desc.?[idx[1]].flags |= VIRTQ_DESC_F_NEXT;
+    disk.virtq_desc.?[idx[1]].next = idx[2];
+
+    disk.virtq_desc.?[idx[2]].addr = @ptrToInt(&disk.status[idx[0]]);
+    disk.virtq_desc.?[idx[2]].len = @sizeOf(u8);
+    // TODO: bool write , device writable
+    disk.virtq_desc.?[idx[2]].flags = VIRTQ_DESC_F_WRITE;
+    disk.virtq_desc.?[idx[2]].next = 0;
+
+    disk.virtq_avail.?.ring[disk.virtq_avail.?.idx % QUEUE_SIZE] = idx[0];
+
+    @fence(std.atomic.Ordering.SeqCst);
+    disk.virtq_avail.?.idx += 1;
+    @fence(std.atomic.Ordering.SeqCst);
+
+    // Available buffer notification, there's only 1 queue indexed at "0"
+    regs.queue_notify = 0;
 }
 
 test "packed struct" {
-    const std = @import("std");
     const mmio_end = 0x100;
     // All the bytes to end + the bytes (u32) of the last address
     try std.testing.expectEqual(@sizeOf(VirtioRegisters), mmio_end + @sizeOf(u32));

@@ -25,6 +25,9 @@ fn kmain() noreturn {
     plic.plicInit();
     virtio_disk.virtioDiskInit();
 
+    var arr = [_]u8{ 'h', 'e' };
+    virtio_disk.virtioDiskRW(arr[0..]);
+
     @panic("You reached kmain!");
 }
 
