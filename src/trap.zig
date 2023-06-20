@@ -2,6 +2,7 @@ const consts = @import("consts.zig");
 const riscv_asm = @import("asm.zig");
 const plic = @import("plic.zig");
 const uart = @import("uart.zig");
+const virtio_disk = @import("virtio_disk.zig");
 
 const printf = @import("uart.zig").printf;
 
@@ -23,7 +24,7 @@ pub export fn kernelTrap() void {
             if (irq == plic.UART_SRC) {
                 uart.handleUartIntr();
             } else { // TODO: virtio
-                printf("IRQ: {d}\n", .{irq});
+                virtio_disk.virtioDiskIntr();
             }
             plic.plicComplete(irq);
         } else {}

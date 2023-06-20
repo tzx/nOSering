@@ -19,6 +19,7 @@ const VIRTQ_DESC_F_NEXT = 1;
 const VIRTQ_DESC_F_WRITE = 2;
 
 const QUEUE_SIZE = 64;
+const SECTOR_SIZE = 512;
 
 // XXX: Zig's packed struct does not allow arrays
 // https://github.com/ziglang/zig/issues/12547
@@ -178,13 +179,30 @@ const disk = struct {
     var virtq_avail: ?*VirtqAvail = null;
     var virtq_used: ?*VirtqUsed = null;
 
+    var occupied_descs = std.mem.zeroes([QUEUE_SIZE]bool);
+    var last_seen_used: usize = 0;
+
     // Have data structure that has space for
     // buf0 (type, reserved, sector) and buf2 (status)
     // buf1 is what we read/write, so that's not in this data structure
     // for each descriptor
-    // TODO: actually i think we need buf1 because of interrupts
     var headers = std.mem.zeroes([QUEUE_SIZE]VirtioBlkReqHeader);
-    var status = std.mem.zeroes([QUEUE_SIZE]u8);
+    var status = [_]u8{0xff} ** QUEUE_SIZE; // status = 0 means good
+    // We just keep track of buf1 by saving pointers to them
+    var buffer_pointers = std.mem.zeroes([QUEUE_SIZE]?[*]u8);
+
+    fn get_free_desc() ?u16 {
+        // XXX: Zig enumerate right now
+        var i: usize = 0;
+        while (i < QUEUE_SIZE) : (i += 1) {
+            if (!disk.occupied_descs[i]) {
+                disk.occupied_descs[i] = true;
+                // TODO: runtime error for truncate?
+                return @truncate(u16, i);
+            }
+        }
+        return null;
+    }
 };
 
 const regs = @intToPtr(*volatile VirtioRegisters, VIRTIO_BASE_ADDR);
@@ -231,9 +249,10 @@ fn virtioBlkSetFeatures() void {
         if (device_features & cap.bit_flag != 0) {
             if (cap.enable) {
                 request |= cap.bit_flag;
-            } else {
-                printf("Your virtio device supports {s}\n", .{cap.name});
             }
+            // else {
+            //     printf("Your virtio device supports {s}\n", .{cap.name});
+            // }
         }
         device_features &= ~cap.bit_flag;
     }
@@ -287,17 +306,16 @@ fn virtioBlkConfigVirtqueue() void {
     regs.queue_ready = 0x1;
 }
 
-// TODO: WRITE, READ BOOLEAN PROVIDE BUFFER, sector etc
-// Assumes buffer len is u32
-pub fn virtioDiskRW(buf: []u8) void {
-    // TODO: param
-    const sector = 0;
-    // TODO: Need to keep internal structure for free and used index
-    const idx = [_]usize{ 1, 2, 3 };
+// Assumes buffer len is u32 and is a multiple of SECTOR_SIZE
+pub fn virtioDiskRW(buf: []u8, sector: usize, write: bool) void {
+    if (buf.len % SECTOR_SIZE != 0) {
+        @panic("virtioDiskRW: must provide buffer that is multiple of SECTOR_SIZE");
+    }
+
+    const idx = [_]u16{ disk.get_free_desc().?, disk.get_free_desc().?, disk.get_free_desc().? };
 
     var blk_header = &disk.headers[idx[0]];
-    // TODO: bool write
-    blk_header.type = VIRTIO_BLK_T_OUT;
+    blk_header.type = if (write) VIRTIO_BLK_T_OUT else VIRTIO_BLK_T_IN;
     // blk_header.reserved = 0;
     blk_header.sector = sector;
 
@@ -312,16 +330,17 @@ pub fn virtioDiskRW(buf: []u8) void {
 
     disk.virtq_desc.?[idx[1]].addr = @ptrToInt(buf.ptr);
     disk.virtq_desc.?[idx[1]].len = @truncate(u32, buf.len);
-    // TODO: bool write , device writable
-    disk.virtq_desc.?[idx[1]].flags = 0;
+    disk.virtq_desc.?[idx[1]].flags = if (write) 0 else VIRTQ_DESC_F_WRITE;
     disk.virtq_desc.?[idx[1]].flags |= VIRTQ_DESC_F_NEXT;
     disk.virtq_desc.?[idx[1]].next = idx[2];
 
     disk.virtq_desc.?[idx[2]].addr = @ptrToInt(&disk.status[idx[0]]);
     disk.virtq_desc.?[idx[2]].len = @sizeOf(u8);
-    // TODO: bool write , device writable
     disk.virtq_desc.?[idx[2]].flags = VIRTQ_DESC_F_WRITE;
     disk.virtq_desc.?[idx[2]].next = 0;
+
+    // We keep track of item by using first descriptor (status, buffer_pointer)
+    disk.buffer_pointers[idx[0]] = buf.ptr;
 
     disk.virtq_avail.?.ring[disk.virtq_avail.?.idx % QUEUE_SIZE] = idx[0];
 
@@ -331,6 +350,30 @@ pub fn virtioDiskRW(buf: []u8) void {
 
     // Available buffer notification, there's only 1 queue indexed at "0"
     regs.queue_notify = 0;
+}
+
+pub fn virtioDiskIntr() void {
+    const status = regs.interrupt_status;
+    regs.interrupt_ack = status;
+    while (disk.last_seen_used != disk.virtq_used.?.idx) : (disk.last_seen_used += 1) {
+        const elem = disk.virtq_used.?.ring[disk.last_seen_used % QUEUE_SIZE];
+        const idx = elem.id;
+        // const buf = disk.buffer_pointers[idx].?;
+        // printf("buffer content: {s}\n", .{buf[0..SECTOR_SIZE]});
+        freeChain(idx);
+    }
+}
+
+fn freeChain(idx_: usize) void {
+    var idx = idx_;
+    while (true) {
+        disk.occupied_descs[idx] = false;
+        const desc = disk.virtq_desc.?[idx];
+        if (desc.flags & VIRTQ_DESC_F_NEXT == 0) {
+            break;
+        }
+        idx = desc.next;
+    }
 }
 
 test "packed struct" {

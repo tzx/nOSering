@@ -1,3 +1,5 @@
+const std = @import("std");
+
 const builtin = @import("std").builtin;
 const uart = @import("uart.zig");
 const freelist = @import("freelist.zig");
@@ -25,8 +27,17 @@ fn kmain() noreturn {
     plic.plicInit();
     virtio_disk.virtioDiskInit();
 
-    var arr = [_]u8{ 'h', 'e' };
-    virtio_disk.virtioDiskRW(arr[0..]);
+    // Writes
+    // var arr = std.mem.zeroes([512]u8);
+    // var s = arr[0..6];
+    // @memcpy(s, "guiddd", 6);
+    // virtio_disk.virtioDiskRW(&arr, 2, true);
+    // Reads
+    // var arr1 = std.mem.zeroes([512]u8);
+    // virtio_disk.virtioDiskRW(&arr1, 0, false);
+
+    // var arr2 = std.mem.zeroes([512]u8);
+    // virtio_disk.virtioDiskRW(&arr2, 2, false);
 
     @panic("You reached kmain!");
 }
