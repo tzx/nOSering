@@ -8,6 +8,7 @@ const plic = @import("plic.zig");
 const riscv_asm = @import("asm.zig");
 const trap = @import("trap.zig");
 const virtio_disk = @import("virtio_disk.zig");
+const fs = @import("fs.zig");
 
 extern const kernelvec: u8;
 extern const machinevec: u8;
@@ -26,18 +27,10 @@ fn kmain() noreturn {
     pagetable.kvmInit();
     plic.plicInit();
     virtio_disk.virtioDiskInit();
+    fs.fsInit();
 
-    // Writes
-    // var arr = std.mem.zeroes([512]u8);
-    // var s = arr[0..6];
-    // @memcpy(s, "guiddd", 6);
-    // virtio_disk.virtioDiskRW(&arr, 2, true);
-    // Reads
-    // var arr1 = std.mem.zeroes([512]u8);
-    // virtio_disk.virtioDiskRW(&arr1, 0, false);
-
-    // var arr2 = std.mem.zeroes([512]u8);
-    // virtio_disk.virtioDiskRW(&arr2, 2, false);
+    testFs();
+    testVirtioDisk();
 
     @panic("You reached kmain!");
 }
@@ -112,6 +105,28 @@ fn timerInit() void {
     // Need to enable SIE so timer interrupts happens in SUPERVISOR MODE
     // TODO: maybe when we reach init, we turn this off
     riscv_asm.writeMstatus(riscv_asm.readMstatus() | 0x02);
+}
+
+fn testVirtioDisk() void {
+    // Writes
+    // var arr = std.mem.zeroes([512]u8);
+    // var s = arr[0..6];
+    // @memcpy(s, "guiddd", 6);
+    // virtio_disk.virtioDiskRW(&arr, 2, true);
+    // Reads
+    var arr1 = std.mem.zeroes([512]u8);
+    virtio_disk.virtioDiskRW(&arr1, 2, false);
+
+    var arr2 = std.mem.zeroes([512]u8);
+    virtio_disk.virtioDiskRW(&arr2, 0, false);
+}
+
+fn testFs() void {
+    const new_entry = fs.fsNew("abc");
+
+    // wait for interrupt
+    var data = "data".*;
+    fs.fsWrite(new_entry.?, &data);
 }
 
 comptime {

@@ -2,6 +2,7 @@ const std = @import("std");
 
 const printf = @import("uart.zig").printf;
 const freelist = @import("freelist.zig");
+const SpinLock = @import("spinlock.zig").SpinLock;
 const VIRTIO_BASE_ADDR = @import("memlayout.zig").VIRTIO0;
 
 // All from QEMU
@@ -19,7 +20,7 @@ const VIRTQ_DESC_F_NEXT = 1;
 const VIRTQ_DESC_F_WRITE = 2;
 
 const QUEUE_SIZE = 64;
-const SECTOR_SIZE = 512;
+pub const SECTOR_SIZE = 512;
 
 // XXX: Zig's packed struct does not allow arrays
 // https://github.com/ziglang/zig/issues/12547
@@ -191,6 +192,8 @@ const disk = struct {
     // We just keep track of buf1 by saving pointers to them
     var buffer_pointers = std.mem.zeroes([QUEUE_SIZE]?[*]u8);
 
+    var spinlock = SpinLock.new();
+
     fn get_free_desc() ?u16 {
         // XXX: Zig enumerate right now
         var i: usize = 0;
@@ -308,6 +311,10 @@ fn virtioBlkConfigVirtqueue() void {
 
 // Assumes buffer len is u32 and is a multiple of SECTOR_SIZE
 pub fn virtioDiskRW(buf: []u8, sector: usize, write: bool) void {
+    // Lock, so only one disk operation works, this should be fine because the interrupts unlocks this after done
+    disk.spinlock.lock();
+    // printf("locked\n", .{});
+    // printf("len: {d}\n", .{buf.len});
     if (buf.len % SECTOR_SIZE != 0) {
         @panic("virtioDiskRW: must provide buffer that is multiple of SECTOR_SIZE");
     }
@@ -361,6 +368,9 @@ pub fn virtioDiskIntr() void {
         // const buf = disk.buffer_pointers[idx].?;
         // printf("buffer content: {s}\n", .{buf[0..SECTOR_SIZE]});
         freeChain(idx);
+        // Free the lock on RW
+        // printf("unlocking\n", .{});
+        disk.spinlock.unlock();
     }
 }
 
